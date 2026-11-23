@@ -45,6 +45,12 @@ button — re-drag the folder to redeploy). Netlify Functions are plain Node
 CommonJS using built-in `fetch` (no npm packages, because drag-and-drop deploys
 don't run `npm install`). Stripe is called via raw REST.
 
+**Git / GitHub (since 2026-11-24):** this folder is a git repo, pushed to the **private**
+repo https://github.com/aidangrantprint-del/berels-bakery (branch `main`, `gh` CLI is
+logged in). Commits use the GitHub noreply email (repo-local git config). Netlify is
+**not** linked to the repo yet — deploys are still drag-and-drop. `.gitignore` excludes
+`.DS_Store` and `.claude/settings.local.json`. Commit/push only when the owner asks.
+
 ```
 index.html              Home: transparent-nav hero + About Me + About My Business
 menu.html               Menu grid (4 cards). Cart sidebar is injected by JS
