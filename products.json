@@ -1,7 +1,7 @@
 {
   "white_sourdough": false,
-  "seeded_sourdough": false,
+  "seeded_sourdough": true,
   "choc_chunk_cookie": false,
-  "cinnamon_scroll": false,
+  "cinnamon_scroll": true,
   "cinnamon_scroll_icing": false
 }
