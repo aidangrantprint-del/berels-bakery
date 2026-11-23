@@ -224,6 +224,25 @@ section h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin-top: 0; }
 .product-card .price { font-weight: 700; color: var(--crust-dark); font-size: 1.1rem; }
 .tap-hint { font-size: 0.8rem; color: var(--cocoa-soft); margin-top: 0.35rem; }
 
+/* ----- Sold out (switches in products.json, edited at /admin) ----- */
+.product-card .img-link { position: relative; }
+.product-card.is-sold-out .slide { filter: grayscale(0.6) brightness(0.85); }
+.product-card.is-sold-out .img-link::after {
+  content: "Sold out";
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  background: var(--cocoa);
+  color: var(--cream);
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  z-index: 1;
+}
+.btn.btn-sold-out, .btn.btn-sold-out:disabled { width: 100%; background: var(--dough); color: var(--cocoa-soft); }
+.addon-sold-out { text-align: left; font-weight: 600; margin: 0.4rem 0 0; }
+
 /* ===== Item detail page ===== */
 .item-detail {
   display: grid;

@@ -68,7 +68,23 @@ netlify/functions/
 netlify/STRIPE_SETUP.md     Stripe setup + go-live steps
 order-backend/Code.gs   Google Apps Script (paste into the Sheet's Apps Script editor)
 order-backend/SETUP.md  Apps Script / Sheet setup steps
+products.json           SOLD-OUT SWITCHES only (true/false per item, keys = id with "_",
+                        plus "cinnamon_scroll_icing"). No prices here — prices stay in code.
+admin/index.html        Decap CMS 3.17.3 (unpkg) — Asher edits products.json at /admin
+admin/config.yml        Decap config: GitHub backend → aidangrantprint-del/berels-bakery, main
 ```
+
+**Sold-out system (built 2026-11-24):** `main.js` `loadStock()` fetches `products.json`
+after render (fails open = nothing sold out); sold-out items show a "Sold out" label on
+the menu photo + disabled button, and are removed from saved carts; a sold-out icing
+removes the add-on and shows a note. `create-checkout.js` re-reads the live
+`/products.json` (`process.env.URL`) and returns **409** with a friendly message if a
+sold-out item/icing is ordered (also fails open). Adding a product → add its key to
+`products.json` AND a boolean field in `admin/config.yml`.
+**Requires (owner's side, in progress):** Netlify linked to the GitHub repo (so /admin
+commits redeploy), a GitHub OAuth app (callback `https://api.netlify.com/auth/done`,
+"Expire user access tokens" OFF) installed under Netlify → Access & security → OAuth,
+and Asher invited as a repo collaborator.
 
 **Shell gotcha:** the folder path contains an apostrophe — `Berel's Bakery`. Quote
 paths carefully. Environment is **macOS** (zsh) since 2026-11-07 — the owner moved

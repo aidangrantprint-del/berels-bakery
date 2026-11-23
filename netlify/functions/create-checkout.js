@@ -5,6 +5,21 @@
  */
 const { computeOrder } = require("./utils/pricing");
 
+/* Reads the live sold-out switches from the published site. If they can't be
+   read for any reason, nothing is treated as sold out (never blocks a sale by
+   accident). */
+async function loadSoldOut(origin) {
+  try {
+    const res = await fetch(origin + "/products.json", { headers: { "Cache-Control": "no-cache" } });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return data && typeof data === "object" ? data : {};
+  } catch (err) {
+    console.error("Couldn't read products.json:", err);
+    return {};
+  }
+}
+
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -28,6 +43,25 @@ exports.handler = async function (event) {
   const { lines, total } = computeOrder(data.cart, data.addons);
   if (lines.length === 0 || total <= 0) {
     return { statusCode: 400, body: JSON.stringify({ error: "Your cart is empty." }) };
+  }
+
+  // Refuse anything Asher has switched to sold out (products.json, edited at /admin).
+  const siteOrigin = process.env.URL || ("https://" + (event.headers.host || ""));
+  const stock = await loadSoldOut(siteOrigin);
+  for (const line of lines) {
+    const key = line.id.replace(/-/g, "_");
+    if (stock[key] === true) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: "Sorry, the " + line.name + " has just sold out, so it's been taken out of your cart. Please check your order and try again." }),
+      };
+    }
+    if (line.note && stock[key + "_icing"] === true) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: "Sorry, the cream cheese icing has just sold out, so it's been taken off your scrolls. Please check your order and try again." }),
+      };
+    }
   }
 
   const name = String(data.name || "").trim().slice(0, 200);

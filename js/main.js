@@ -29,6 +29,55 @@ const MENU_ITEMS = [
   },
 ];
 
+/* ---- Sold-out switches ----
+   products.json (edited by Asher at /admin) holds true/false per item, keyed by
+   the item id with "_" instead of "-", plus "<key>_icing" for an add-on.
+   Loaded after the page renders; if it can't be loaded, nothing is sold out. */
+const SOLD_OUT = {};
+const STOCK_URL = (document.currentScript && document.currentScript.src)
+  ? new URL("../products.json", document.currentScript.src).href
+  : "/products.json";
+
+function stockKey(id) { return id.replace(/-/g, "_"); }
+function isSoldOut(id) { return SOLD_OUT[stockKey(id)] === true; }
+function isAddOnSoldOut(id) { return SOLD_OUT[stockKey(id) + "_icing"] === true; }
+
+async function loadStock() {
+  try {
+    const res = await fetch(STOCK_URL, { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    Object.keys(SOLD_OUT).forEach(k => delete SOLD_OUT[k]);
+    Object.entries(data || {}).forEach(([k, v]) => { SOLD_OUT[k] = v === true; });
+  } catch (e) {
+    return; // offline / local preview — treat everything as available
+  }
+
+  // Take sold-out things out of any cart saved from an earlier visit.
+  MENU_ITEMS.forEach(item => {
+    if (isSoldOut(item.id)) { delete cart[item.id]; delete cartAddons[item.id]; }
+    else if (isAddOnSoldOut(item.id)) { delete cartAddons[item.id]; }
+  });
+  saveCart();
+  renderCart();
+  renderItemControls();
+  markSoldOutCards();
+}
+
+/* Adds a "Sold out" label over the photo on menu cards. */
+function markSoldOutCards() {
+  document.querySelectorAll(".order-control[data-item-id]").forEach(ctrl => {
+    const card = ctrl.closest(".product-card");
+    if (card) card.classList.toggle("is-sold-out", isSoldOut(ctrl.dataset.itemId));
+  });
+}
+
+/* Shown instead of the add-on dropdown when the add-on is sold out. */
+function addOnSoldOutHtml(addOn) {
+  const label = addOn.label.charAt(0).toUpperCase() + addOn.label.slice(1);
+  return `<p class="pack-hint addon-sold-out">${label} is sold out right now.</p>`;
+}
+
 /* Cart state: maps item id -> quantity */
 const cart = {};
 
@@ -88,6 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSlideshows();
   initCartControls();
   initMenuCart();
+  loadStock(); // fetch sold-out switches, then re-render
 });
 
 /* ---- Menu page: cross-fade each card's slideshow ---- */
@@ -153,10 +203,15 @@ function renderItemControls() {
     const addOn = itemAddOn(id);
     const item = MENU_ITEMS.find(m => m.id === id);
 
-    const addOnHtml = (qty > 0 && addOn) ? `
+    if (isSoldOut(id)) {
+      ctrl.innerHTML = `<button type="button" class="btn btn-sold-out" disabled>Sold out</button>`;
+      return;
+    }
+
+    const addOnHtml = (qty > 0 && addOn) ? (isAddOnSoldOut(id) ? addOnSoldOutHtml(addOn) : `
       <select class="pack-select addon-select" data-addon-select="${id}" aria-label="How many with ${addOn.label}?">
         ${addOnOptionsHtml(addOn, qty, cartAddons[id] || 0)}
-      </select>` : "";
+      </select>`) : "";
 
     if (item && item.packSelect) {
       ctrl.innerHTML = `
@@ -275,6 +330,7 @@ function itemMax(id) {
 }
 
 function changeQty(id, delta) {
+  if (delta > 0 && isSoldOut(id)) return;
   const packs = itemPacks(id);
   const current = cart[id] || 0;
   let next;
@@ -309,6 +365,7 @@ function changeQty(id, delta) {
    dropdown, instead of stepping one pack at a time). */
 function setPackQty(id, qty) {
   qty = Number(qty) || 0;
+  if (qty > 0 && isSoldOut(id)) return;
   if (qty === 0) {
     delete cart[id];
     delete cartAddons[id];
@@ -350,6 +407,7 @@ function itemAddOn(id) {
    (e.g. "2 of the 6 scrolls with icing"). Clamped to the current quantity. */
 function setAddOnCount(id, count) {
   if (!itemAddOn(id)) return;
+  if (Number(count) > 0 && isAddOnSoldOut(id)) return;
   const qty = cart[id] || 0;
   const clamped = Math.min(Math.max(Number(count) || 0, 0), qty);
   if (clamped === 0) delete cartAddons[id];
@@ -426,9 +484,10 @@ function renderCart() {
         const addOn = item ? itemAddOn(item.id) : null;
         const addOnRow = addOn ? `
           <div class="cl-addon-row">
+            ${isAddOnSoldOut(l.id) ? addOnSoldOutHtml(addOn) : `
             <select class="pack-select pack-select-sm addon-select" data-addon-select="${l.id}" aria-label="How many with ${addOn.label}?">
               ${addOnOptionsHtml(addOn, l.qty, cartAddons[l.id] || 0)}
-            </select>
+            </select>`}
           </div>` : "";
         return `<li>
           <span class="cl-name">${l.name}${noteHtml}</span>
@@ -565,6 +624,13 @@ function initOrderForm() {
         const data = await res.json();
         if (res.ok && data.url) {
           window.location.href = data.url;
+          return;
+        }
+        if (res.status === 409 && data.error) {
+          // Something sold out while it was in the cart: refresh and explain.
+          await loadStock();
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Continue to Payment"; }
+          alert(data.error);
           return;
         }
         throw new Error(data.error || "No checkout URL returned.");
