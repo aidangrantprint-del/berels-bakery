@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menu — Berel's Bakery</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <script src="js/main.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="index.html">Berel's <span>Bakery</span></a>
+      <nav class="site-nav">
+        <a href="index.html">Home</a>
+        <a href="menu.html" class="active">Menu</a>
+        <a href="menu.html#order" data-open-cart>Order</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <section>
+        <h2>Our Menu</h2>
+        <p>Baked fresh in small batches. <strong>Tap any photo</strong> to see the full description and ingredients.</p>
+
+        <div class="menu-grid">
+          <!-- White Sourdough Loaf -->
+          <article class="product-card">
+            <a class="img-link" href="items/white-sourdough.html">
+              <div class="slideshow">
+                <img src="images/white-sourdough.jpg" alt="White Sourdough Loaf" class="slide active" data-placeholder>
+              </div>
+            </a>
+            <div class="body">
+              <h3>White Sourdough Loaf</h3>
+              <p class="desc">Naturally fermented and baked in a tin for a soft, even crumb and golden crust.</p>
+              <span class="price">$8.50</span>
+              <span class="tap-hint">Tap photo for details →</span>
+              <div class="order-control" data-item-id="white-sourdough"></div>
+            </div>
+          </article>
+
+          <!-- Seeded Sourdough Loaf -->
+          <article class="product-card">
+            <a class="img-link" href="items/seeded-sourdough.html">
+              <div class="slideshow">
+                <img src="images/seeded-sourdough.jpg" alt="Seeded Sourdough Loaf" class="slide active" data-placeholder>
+              </div>
+            </a>
+            <div class="body">
+              <h3>Seeded Sourdough Loaf</h3>
+              <p class="desc">Crunchy and packed with toasted seeds.</p>
+              <span class="price">$11.00</span>
+              <span class="tap-hint">Tap photo for details →</span>
+              <div class="order-control" data-item-id="seeded-sourdough"></div>
+            </div>
+          </article>
+
+          <!-- Choc Chunk Cookie -->
+          <article class="product-card">
+            <a class="img-link" href="items/choc-chunk-cookie.html">
+              <div class="slideshow">
+                <img src="images/choc-chunk-cookie.jpg" alt="Choc Chunk Cookie" class="slide active" data-placeholder>
+              </div>
+            </a>
+            <div class="body">
+              <h3>Choc Chunk Cookie</h3>
+              <p class="desc">Thick, gooey cookie packed with melty chunks of dark chocolate.</p>
+              <span class="price">$5.00</span>
+              <span class="tap-hint">Tap photo for details →</span>
+              <div class="order-control" data-item-id="choc-chunk-cookie"></div>
+            </div>
+          </article>
+
+          <!-- Cinnamon Scroll -->
+          <article class="product-card">
+            <a class="img-link" href="items/cinnamon-scroll.html">
+              <div class="slideshow">
+                <img src="images/cinnamon-scroll.jpg" alt="Cinnamon Scroll" class="slide active" data-placeholder>
+              </div>
+            </a>
+            <div class="body">
+              <h3>Cinnamon Scroll</h3>
+              <p class="desc">Soft, fluffy cinnamon scroll — add cream cheese icing for $1.50 each.</p>
+              <span class="price">$4.50</span>
+              <span class="tap-hint">Tap photo for details →</span>
+              <div class="order-control" data-item-id="cinnamon-scroll"></div>
+            </div>
+          </article>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div>
+        <h3>Berel's Bakery</h3>
+        <p>Handmade sourdough &amp; treats, baked fresh daily.</p>
+      </div>
+      <div>
+        <h3>Contact Information</h3>
+        <p>Phone: <a href="tel:0456643409">0456643409</a><br>
+           Email: <a href="mailto:berels.bakery@gmail.com">berels.bakery@gmail.com</a></p>
+        <p>Although contact information is here, please order through the cart on this page.</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

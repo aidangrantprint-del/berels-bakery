@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmed — Berel's Bakery</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <script>
+    // Payment already succeeded if this page loads at all (Stripe only sends
+    // customers here after a paid checkout) — safe to empty the cart now.
+    try {
+      localStorage.removeItem("berels-cart");
+      localStorage.removeItem("berels-cart-addons");
+    } catch (e) { /* ignore */ }
+  </script>
+  <script src="js/main.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="index.html">Berel's <span>Bakery</span></a>
+      <nav class="site-nav">
+        <a href="index.html">Home</a>
+        <a href="menu.html">Menu</a>
+        <a href="menu.html#order" data-open-cart>Order</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <section>
+        <div id="success-content" class="confirmation">
+          <h2>Checking your payment…</h2>
+          <p>One moment while we confirm everything with Stripe.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div>
+        <h3>Berel's Bakery</h3>
+        <p>Handmade sourdough &amp; treats, baked fresh daily.</p>
+      </div>
+      <div>
+        <h3>Contact Information</h3>
+        <p>Phone: <a href="tel:0456643409">0456643409</a><br>
+           Email: <a href="mailto:berels.bakery@gmail.com">berels.bakery@gmail.com</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Runs after main.js has fully loaded (so sendOrder() is available).
+    window.addEventListener("load", function () {
+      const content = document.getElementById("success-content");
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get("session_id");
+
+      if (!sessionId) {
+        content.innerHTML = "<h2>No order found</h2><p>We couldn't find a payment to confirm here. If you were charged, please contact us and we'll sort it out.</p>";
+        return;
+      }
+
+      fetch("/.netlify/functions/get-checkout-session?session_id=" + encodeURIComponent(sessionId))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.paid) {
+            content.innerHTML = "<h2>Payment not confirmed</h2><p>We couldn't verify this payment yet. If you were charged, please contact us and we'll sort it out.</p>";
+            return;
+          }
+
+          const itemsHtml = (data.items || [])
+            .map(function (l) {
+              return "<li>" + l.qty + " × " + l.name + (l.note ? " (+ " + l.note + ")" : "") + " — $" + Number(l.lineTotal).toFixed(2) + "</li>";
+            })
+            .join("");
+
+          content.innerHTML =
+            "<h2>Thanks" + (data.name ? ", " + data.name : "") + "! 🥖</h2>" +
+            "<p>Your payment has gone through and your order is confirmed. We'll reach out by " +
+            (data.contactMethod || "email") + " (" + (data.contact || "") + ") if we need anything else.</p>" +
+            "<p><strong>Your order:</strong></p>" +
+            "<ul>" + itemsHtml + "</ul>" +
+            "<p class=\"conf-total\"><strong>Total paid: $" + Number(data.total).toFixed(2) + "</strong></p>";
+
+          // Record the completed order the same way the pay-in-person flow does
+          // (Google Sheet + email) — only fires once payment is verified above.
+          if (typeof sendOrder === "function") {
+            sendOrder({
+              timestamp: new Date().toISOString(),
+              name: data.name,
+              contactMethod: data.contactMethod,
+              contact: data.contact,
+              notes: data.notes,
+              items: data.items,
+              total: Number(data.total),
+              paidOnline: true,
+              sessionId: sessionId, // lets the Apps Script ignore repeat sends (page refresh)
+            });
+          }
+        })
+        .catch(function (err) {
+          console.error("Order verification failed:", err);
+          content.innerHTML = "<h2>Something went wrong</h2><p>We couldn't confirm your order details, but if your card was charged, please contact us and we'll sort it out.</p>";
+        });
+    });
+  </script>
+</body>
+</html>
