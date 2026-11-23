@@ -1,3 +1,29 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+
+# Internal docs and backend source live in the repo but shouldn't be served
+# on the public website. (products.json and admin/ must stay reachable.)
+[[redirects]]
+  from = "/README.md"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/CLAUDE.md"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/order-backend/*"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/netlify/*"
+  to = "/404"
+  status = 404
+  force = true

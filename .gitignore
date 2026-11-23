@@ -3,3 +3,6 @@
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# Project handoff notes for Claude Code (kept local, not published)
+CLAUDE.md
