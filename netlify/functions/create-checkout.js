@@ -4,21 +4,7 @@
  * — never trusted from the browser.
  */
 const { computeOrder } = require("./utils/pricing");
-
-/* Reads the live sold-out switches from the published site. If they can't be
-   read for any reason, nothing is treated as sold out (never blocks a sale by
-   accident). */
-async function loadSoldOut(origin) {
-  try {
-    const res = await fetch(origin + "/products.json", { headers: { "Cache-Control": "no-cache" } });
-    if (!res.ok) return {};
-    const data = await res.json();
-    return data && typeof data === "object" ? data : {};
-  } catch (err) {
-    console.error("Couldn't read products.json:", err);
-    return {};
-  }
-}
+const { loadSoldOut } = require("./utils/stock");
 
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
@@ -77,6 +63,9 @@ exports.handler = async function (event) {
   params.append("mode", "payment");
   params.append("success_url", successUrl);
   params.append("cancel_url", cancelUrl);
+  // Payment page expires after 31 min (Stripe's minimum is 30) instead of the
+  // default 24 h, so an old page can't be paid long after something sells out.
+  params.append("expires_at", String(Math.floor(Date.now() / 1000) + 31 * 60));
   if (contactMethod === "email" && contact) {
     params.append("customer_email", contact);
   }

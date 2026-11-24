@@ -88,6 +88,13 @@
             "<ul>" + itemsHtml + "</ul>" +
             "<p class=\"conf-total\"><strong>Total paid: $" + Number(data.total).toFixed(2) + "</strong></p>";
 
+          const soldOut = data.soldOut || [];
+          if (soldOut.length) {
+            content.innerHTML +=
+              "<p class=\"sold-out-note\"><strong>Heads up:</strong> " + soldOut.join(", ") +
+              " sold out just as you ordered. We'll be in touch shortly to sort it out, and you'll get a refund for anything we can't make.</p>";
+          }
+
           // Record the completed order the same way the pay-in-person flow does
           // (Google Sheet + email) — only fires once payment is verified above.
           if (typeof sendOrder === "function") {
@@ -100,7 +107,11 @@
               items: data.items,
               total: Number(data.total),
               paidOnline: true,
-              sessionId: sessionId, // lets the Apps Script ignore repeat sends (page refresh)
+              sessionId: sessionId, // lets the Apps Script ignore repeat sends (page refresh / webhook copy)
+              warning: soldOut.length
+                ? "SOLD OUT when paid: " + soldOut.join(", ") + " — refund or contact the customer"
+                : "",
+              source: "success-page",
             });
           }
         })

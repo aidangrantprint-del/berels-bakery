@@ -138,6 +138,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initCartControls();
   initMenuCart();
   loadStock(); // fetch sold-out switches, then re-render
+
+  // Refresh the switches when someone comes back to a tab they left open
+  // (or returns from Stripe with the Back button), so stale pages catch up.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") loadStock();
+  });
+  window.addEventListener("pageshow", e => { if (e.persisted) loadStock(); });
 });
 
 /* ---- Menu page: cross-fade each card's slideshow ---- */
@@ -607,6 +614,16 @@ function initOrderForm() {
       // Sheet afterwards, once payment is confirmed (see order-success.html).
       const submitBtn = document.getElementById("order-submit-btn");
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Redirecting to payment…"; }
+
+      // Re-check the sold-out switches right now, in case the page has been
+      // open a while. If anything just sold out, it's removed — stop and say so.
+      const cartBefore = JSON.stringify(cart) + JSON.stringify(cartAddons);
+      await loadStock();
+      if (JSON.stringify(cart) + JSON.stringify(cartAddons) !== cartBefore) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Continue to Payment"; }
+        alert("Sorry, something in your cart has just sold out, so it's been taken out. Please check your order and try again.");
+        return;
+      }
 
       try {
         const res = await fetch(STRIPE_CHECKOUT_ENDPOINT, {

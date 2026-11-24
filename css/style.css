@@ -242,6 +242,12 @@ section h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin-top: 0; }
 }
 .btn.btn-sold-out, .btn.btn-sold-out:disabled { width: 100%; background: var(--dough); color: var(--cocoa-soft); }
 .addon-sold-out { text-align: left; font-weight: 600; margin: 0.4rem 0 0; }
+.sold-out-note {
+  background: #fff4e0;
+  border: 2px solid var(--crust);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
 
 /* ===== Item detail page ===== */
 .item-detail {

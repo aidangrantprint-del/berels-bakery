@@ -1,5 +1,7 @@
 /**
- * Berel's Bakery — order receiver (v2, 2026-11-24)
+ * Berel's Bakery — order receiver (v3, 2026-11-25: adds "Warning" column for
+ * orders that include a sold-out item; orders now also arrive from the Stripe
+ * webhook, so every paid order is recorded even if the customer closes the tab)
  *
  * Saves each order as a row in the FIRST tab of this Google Sheet (one column
  * per product, showing the quantity ordered) and emails a copy.
@@ -29,7 +31,7 @@ var PRODUCTS = [
 ];
 
 var BASE_COLUMNS = ["Timestamp", "Name", "Contact method", "Contact"];
-var SUMMARY_COLUMNS = ["Total items", "Order total", "Payment", "Notes", "Email sent", "Stripe session"];
+var SUMMARY_COLUMNS = ["Total items", "Order total", "Payment", "Notes", "Warning", "Email sent", "Stripe session"];
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -62,7 +64,9 @@ function doPost(e) {
     var itemsText = items.map(function (i) {
       return "  • " + i.qty + " x " + i.name + (i.note ? " (+ " + i.note + ")" : "");
     }).join("\n");
+    var warning = String(data.warning || "");
     var body =
+      (warning ? "⚠ " + warning + "\n\n" : "") +
       "New order from the Berel's Bakery website\n\n" +
       "Name: " + (data.name || "") + "\n" +
       "Contact by " + (data.contactMethod || "") + ": " + (data.contact || "") + "\n\n" +
@@ -76,7 +80,8 @@ function doPost(e) {
     try {
       var mail = {
         to: NOTIFY_EMAIL,
-        subject: (data.paidOnline ? "Paid order" : "New order") + " — " + (data.name || "customer") + " — " + totalText,
+        subject: (warning ? "⚠ SOLD OUT ITEM — " : "") +
+          (data.paidOnline ? "Paid order" : "New order") + " — " + (data.name || "customer") + " — " + totalText,
         body: body,
         name: "Berel's Bakery Website",
       };
@@ -100,6 +105,7 @@ function doPost(e) {
       "Order total": totalText,
       "Payment": paymentText,
       "Notes": data.notes || "",
+      "Warning": warning,
       "Email sent": emailStatus,
       "Stripe session": sessionId,
     };

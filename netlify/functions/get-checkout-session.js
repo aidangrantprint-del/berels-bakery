@@ -3,6 +3,8 @@
  * plus the order details stored in its metadata. Called by order-success.html
  * after Stripe redirects the customer back.
  */
+const { loadSoldOut, soldOutProblems } = require("./utils/stock");
+
 exports.handler = async function (event) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const sessionId = event.queryStringParameters && event.queryStringParameters.session_id;
@@ -40,6 +42,11 @@ exports.handler = async function (event) {
         notes: meta.notes || "",
         items: items,
         total: meta.total || (session.amount_total != null ? (session.amount_total / 100).toFixed(2) : "0.00"),
+        // Anything in this order that's currently switched to sold out (so the
+        // success page can tell the customer, and flag it in the Sheet/email).
+        soldOut: session.payment_status === "paid"
+          ? soldOutProblems(items, await loadSoldOut(process.env.URL || "https://berelsbakery.com"))
+          : [],
       }),
     };
   } catch (err) {
