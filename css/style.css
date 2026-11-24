@@ -517,6 +517,17 @@ textarea { min-height: 90px; resize: vertical; }
 }
 .site-footer h3 { color: var(--cream); margin: 0 0 0.5rem; font-size: 1.05rem; }
 .site-footer a { color: var(--crust); }
+.footer-credit {
+  max-width: var(--max);
+  margin: 1.75rem auto 0;
+  padding: 1rem 1.25rem 0;
+  border-top: 1px solid rgba(243, 227, 201, 0.15);
+  text-align: center;
+  font-size: 0.85rem;
+  color: rgba(243, 227, 201, 0.75);
+}
+.footer-credit a { color: var(--crust); text-decoration: none; font-weight: 600; }
+.footer-credit a:hover { text-decoration: underline; }
 
 /* ===== Responsive ===== */
 @media (max-width: 700px) {
