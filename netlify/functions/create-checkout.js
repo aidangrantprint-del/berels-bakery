@@ -3,8 +3,8 @@
  * URL to redirect them to. Prices are recalculated here from utils/pricing.js
  * — never trusted from the browser.
  */
-const { computeOrder } = require("./utils/pricing");
-const { loadSoldOut } = require("./utils/stock");
+const { computeOrder, MENU_ITEMS } = require("./utils/pricing");
+const { loadSoldOut, loadLimits } = require("./utils/stock");
 
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
@@ -26,14 +26,31 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid request." }) };
   }
 
-  const { lines, total } = computeOrder(data.cart, data.addons);
+  const siteOrigin = process.env.URL || ("https://" + (event.headers.host || ""));
+  const [stock, limits] = await Promise.all([loadSoldOut(siteOrigin), loadLimits(siteOrigin)]);
+
+  const { lines, total } = computeOrder(data.cart, data.addons, limits);
+
+  // Anything requested that didn't survive the order limits (a pack size that's
+  // been switched off, or more than the current maximum) — refuse with a message
+  // rather than silently charging for less than they asked for.
+  const requested = data.cart && typeof data.cart === "object" ? data.cart : {};
+  for (const id of Object.keys(requested)) {
+    if (!(Number(requested[id]) > 0)) continue;
+    if (!lines.some(function (l) { return l.id === id; })) {
+      const item = MENU_ITEMS.find(function (m) { return m.id === id; });
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: "Sorry, the amount of " + (item ? item.name : "an item") + " in your cart isn't available any more, so it's been adjusted. Please check your order and try again." }),
+      };
+    }
+  }
+
   if (lines.length === 0 || total <= 0) {
     return { statusCode: 400, body: JSON.stringify({ error: "Your cart is empty." }) };
   }
 
   // Refuse anything Asher has switched to sold out (products.json, edited at /admin).
-  const siteOrigin = process.env.URL || ("https://" + (event.headers.host || ""));
-  const stock = await loadSoldOut(siteOrigin);
   for (const line of lines) {
     const key = line.id.replace(/-/g, "_");
     if (stock[key] === true) {

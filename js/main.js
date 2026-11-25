@@ -38,25 +38,61 @@ const STOCK_URL = (document.currentScript && document.currentScript.src)
   ? new URL("../products.json", document.currentScript.src).href
   : "/products.json";
 
+/* ---- Order limits ----
+   limits.json (edited at /admin "Order limits") can only RESTRICT the defaults
+   in MENU_ITEMS: "<key>_max" (1–20) for plain items, "<key>_pack_<n>": false to
+   switch a pack size off. Prices never come from it. Same rules are enforced
+   server-side in netlify/functions/utils/pricing.js. */
+const LIMITS_URL = STOCK_URL.replace(/products\.json$/, "limits.json");
+MENU_ITEMS.forEach(i => { i.defaultPacks = i.packs; i.defaultMax = i.max; });
+
+function applyLimits(limits) {
+  MENU_ITEMS.forEach(item => {
+    const key = stockKey(item.id);
+    if (item.defaultPacks) {
+      item.packs = item.defaultPacks.filter(p => limits[key + "_pack_" + p] !== false);
+    } else {
+      const m = Number(limits[key + "_max"]);
+      item.max = Number.isInteger(m) && m >= 1 ? Math.min(m, 20) : item.defaultMax;
+    }
+  });
+}
+
 function stockKey(id) { return id.replace(/-/g, "_"); }
-function isSoldOut(id) { return SOLD_OUT[stockKey(id)] === true; }
+function isSoldOut(id) {
+  if (SOLD_OUT[stockKey(id)] === true) return true;
+  const item = MENU_ITEMS.find(m => m.id === id);
+  return !!(item && item.packs && item.packs.length === 0); // every pack size switched off
+}
 function isAddOnSoldOut(id) { return SOLD_OUT[stockKey(id) + "_icing"] === true; }
 
-async function loadStock() {
+async function fetchJson(url) {
   try {
-    const res = await fetch(STOCK_URL, { cache: "no-store" });
-    if (!res.ok) return;
-    const data = await res.json();
-    Object.keys(SOLD_OUT).forEach(k => delete SOLD_OUT[k]);
-    Object.entries(data || {}).forEach(([k, v]) => { SOLD_OUT[k] = v === true; });
+    const res = await fetch(url, { cache: "no-store" });
+    return res.ok ? await res.json() : null;
   } catch (e) {
-    return; // offline / local preview — treat everything as available
+    return null; // offline / local preview
   }
+}
 
-  // Take sold-out things out of any cart saved from an earlier visit.
+async function loadStock() {
+  const [stock, limits] = await Promise.all([fetchJson(STOCK_URL), fetchJson(LIMITS_URL)]);
+  if (!stock && !limits) return; // couldn't load either — leave everything as is
+
+  if (stock) {
+    Object.keys(SOLD_OUT).forEach(k => delete SOLD_OUT[k]);
+    Object.entries(stock).forEach(([k, v]) => { SOLD_OUT[k] = v === true; });
+  }
+  if (limits) applyLimits(limits);
+
+  // Fix up any cart saved from an earlier visit: remove sold-out things and
+  // pack sizes that are switched off; bring plain items down to the maximum.
   MENU_ITEMS.forEach(item => {
-    if (isSoldOut(item.id)) { delete cart[item.id]; delete cartAddons[item.id]; }
-    else if (isAddOnSoldOut(item.id)) { delete cartAddons[item.id]; }
+    const qty = cart[item.id] || 0;
+    if (isSoldOut(item.id)) { delete cart[item.id]; delete cartAddons[item.id]; return; }
+    if (qty && item.packs && item.packs.indexOf(qty) === -1) { delete cart[item.id]; delete cartAddons[item.id]; return; }
+    if (qty && !item.packs && item.max && qty > item.max) { cart[item.id] = item.max; clampAddOnCount(item.id); }
+    if (isAddOnSoldOut(item.id)) { delete cartAddons[item.id]; }
   });
   saveCart();
   renderCart();
@@ -621,7 +657,7 @@ function initOrderForm() {
       await loadStock();
       if (JSON.stringify(cart) + JSON.stringify(cartAddons) !== cartBefore) {
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Continue to Payment"; }
-        alert("Sorry, something in your cart has just sold out, so it's been taken out. Please check your order and try again.");
+        alert("Sorry, something in your cart has just sold out or changed, so your cart has been updated. Please check your order and try again.");
         return;
       }
 

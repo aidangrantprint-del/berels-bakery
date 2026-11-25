@@ -26,6 +26,24 @@ const MENU_ITEMS = [
   },
 ];
 
+/* Order limits (limits.json, edited by Asher at /admin) can only RESTRICT what
+   the code allows: switch pack sizes off, or set a per-order maximum (1–20) for
+   plain items. Prices never come from limits.json. Missing/invalid values fall
+   back to the defaults above. */
+const MAX_LIMIT = 20;
+function effectiveItem(item, limits) {
+  limits = limits || {};
+  const key = item.id.replace(/-/g, "_");
+  const out = Object.assign({}, item);
+  if (item.packs) {
+    out.packs = item.packs.filter(function (p) { return limits[key + "_pack_" + p] !== false; });
+  } else {
+    const m = Number(limits[key + "_max"]);
+    if (Number.isInteger(m) && m >= 1) out.max = Math.min(m, MAX_LIMIT);
+  }
+  return out;
+}
+
 function basePriceFor(item, qty) {
   if (item.packPrices && item.packPrices[qty] !== undefined) return item.packPrices[qty];
   return item.price * qty;
@@ -40,13 +58,14 @@ function basePriceFor(item, qty) {
  * silently dropped rather than trusted. Add-on counts are clamped to the
  * item's quantity, so a customer can never be charged for more than they ordered.
  */
-function computeOrder(cartQty, cartAddons) {
+function computeOrder(cartQty, cartAddons, limits) {
   cartQty = cartQty || {};
   cartAddons = cartAddons || {};
   const lines = [];
   let total = 0;
 
-  MENU_ITEMS.forEach(function (item) {
+  MENU_ITEMS.forEach(function (baseItem) {
+    const item = effectiveItem(baseItem, limits);
     const qty = Number(cartQty[item.id] || 0);
     if (!qty || qty <= 0) return;
     if (item.packs && item.packs.indexOf(qty) === -1) return;
@@ -71,4 +90,4 @@ function computeOrder(cartQty, cartAddons) {
   return { lines: lines, total: Math.round(total * 100) / 100 };
 }
 
-module.exports = { MENU_ITEMS, computeOrder };
+module.exports = { MENU_ITEMS, computeOrder, effectiveItem };

@@ -6,15 +6,24 @@
 /* Reads the live switches from the published site. If they can't be read for
    any reason, returns {} (nothing sold out) so a glitch never blocks a sale. */
 async function loadSoldOut(origin) {
+  return loadSiteJson(origin, "/products.json");
+}
+
+/* Order limits (limits.json, edited at /admin "Order limits"). {} = defaults. */
+async function loadLimits(origin) {
+  return loadSiteJson(origin, "/limits.json");
+}
+
+async function loadSiteJson(origin, path) {
   try {
-    const res = await fetch(origin + "/products.json?t=" + Date.now(), {
+    const res = await fetch(origin + path + "?t=" + Date.now(), {
       headers: { "Cache-Control": "no-cache" },
     });
     if (!res.ok) return {};
     const data = await res.json();
     return data && typeof data === "object" ? data : {};
   } catch (err) {
-    console.error("Couldn't read products.json:", err);
+    console.error("Couldn't read " + path + ":", err);
     return {};
   }
 }
@@ -32,4 +41,4 @@ function soldOutProblems(lines, stock) {
   return problems;
 }
 
-module.exports = { loadSoldOut, soldOutProblems };
+module.exports = { loadSoldOut, loadLimits, soldOutProblems };

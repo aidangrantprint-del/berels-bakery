@@ -19,7 +19,7 @@ public_folder: /images
 
 collections:
   - name: stock
-    label: Sold Out
+    label: Shop Settings
     delete: false
     editor:
       preview: false
@@ -37,3 +37,21 @@ collections:
           - { name: choc_chunk_cookie,     label: "Choc Chunk Cookie — sold out",     widget: boolean, default: false }
           - { name: cinnamon_scroll,       label: "Cinnamon Scroll — sold out",       widget: boolean, default: false }
           - { name: cinnamon_scroll_icing, label: "Cream cheese icing (for scrolls) — sold out", widget: boolean, default: false, hint: "Plain scrolls can still be ordered." }
+
+      - name: limits
+        label: Order limits
+        file: limits.json
+        format: json
+        description: >
+          Choose how much of each item people can order, then click Publish.
+          The site updates about a minute later. Prices can't be changed here.
+        fields:
+          - { name: white_sourdough_max,  label: "White Sourdough Loaf — most loaves per order",  widget: number, value_type: int, min: 1, max: 20, default: 2 }
+          - { name: seeded_sourdough_max, label: "Seeded Sourdough Loaf — most loaves per order", widget: number, value_type: int, min: 1, max: 20, default: 2 }
+          - { name: choc_chunk_cookie_pack_1,  label: "Choc Chunk Cookie — allow 1 cookie",   widget: boolean, default: true }
+          - { name: choc_chunk_cookie_pack_4,  label: "Choc Chunk Cookie — allow pack of 4",  widget: boolean, default: true }
+          - { name: choc_chunk_cookie_pack_6,  label: "Choc Chunk Cookie — allow pack of 6",  widget: boolean, default: true }
+          - { name: choc_chunk_cookie_pack_12, label: "Choc Chunk Cookie — allow pack of 12", widget: boolean, default: true }
+          - { name: cinnamon_scroll_pack_1, label: "Cinnamon Scroll — allow 1 scroll",  widget: boolean, default: true }
+          - { name: cinnamon_scroll_pack_3, label: "Cinnamon Scroll — allow pack of 3", widget: boolean, default: true, hint: "If every pack size of an item is switched off, it shows as Sold out." }
+          - { name: cinnamon_scroll_pack_6, label: "Cinnamon Scroll — allow pack of 6", widget: boolean, default: true }
