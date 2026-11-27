@@ -46,25 +46,56 @@ const STOCK_URL = (document.currentScript && document.currentScript.src)
 const LIMITS_URL = STOCK_URL.replace(/products\.json$/, "limits.json");
 MENU_ITEMS.forEach(i => { i.defaultPacks = i.packs; i.defaultMax = i.max; });
 
+/* ---- Stock left (Airtable "In stock", via the get-stock function) ----
+   key -> number left. A missing key = no stock limit. 0 = sold out.
+   Same rules are enforced server-side (pricing.js effectiveItem + create-checkout). */
+const STOCK_LEFT = {};
+const COUNTS_URL = "/.netlify/functions/get-stock";
+let lastLimits = {};
+
+/* Items that share ONE Airtable stock row (both loaves -> "sourdough").
+   Keep in sync with STOCK_GROUPS in netlify/functions/utils/airtable.js. */
+const STOCK_GROUPS = { white_sourdough: "sourdough", seeded_sourdough: "sourdough" };
+function groupKey(key) { return STOCK_GROUPS[key] || key; }
+function stockLeft(key) {
+  const k = groupKey(key);
+  return typeof STOCK_LEFT[k] === "number" ? STOCK_LEFT[k] : null;
+}
+/* How many of a shared stock row the cart already uses, not counting itemId. */
+function groupUsedByOthers(itemId) {
+  const g = groupKey(stockKey(itemId));
+  return MENU_ITEMS.reduce((n, m) => (m.id !== itemId && groupKey(stockKey(m.id)) === g ? n + (cart[m.id] || 0) : n), 0);
+}
+
 function applyLimits(limits) {
+  limits = limits || {};
   MENU_ITEMS.forEach(item => {
     const key = stockKey(item.id);
+    const left = stockLeft(key);
     if (item.defaultPacks) {
-      item.packs = item.defaultPacks.filter(p => limits[key + "_pack_" + p] !== false);
+      item.packs = item.defaultPacks.filter(p => limits[key + "_pack_" + p] !== false && (left === null || p <= left));
     } else {
       const m = Number(limits[key + "_max"]);
       item.max = Number.isInteger(m) && m >= 1 ? Math.min(m, 20) : item.defaultMax;
+      if (left !== null) item.max = Math.min(item.max == null ? left : item.max, left);
     }
   });
+}
+
+/* How many units can have the add-on (e.g. iced scrolls), given what's left. */
+function addOnCap(id, qty) {
+  const left = stockLeft(stockKey(id) + "_icing");
+  return left === null ? qty : Math.min(qty, left);
 }
 
 function stockKey(id) { return id.replace(/-/g, "_"); }
 function isSoldOut(id) {
   if (SOLD_OUT[stockKey(id)] === true) return true;
   const item = MENU_ITEMS.find(m => m.id === id);
-  return !!(item && item.packs && item.packs.length === 0); // every pack size switched off
+  if (item && item.packs && item.packs.length === 0) return true; // every pack size off / too few left
+  return !!(item && !item.packs && item.max === 0);               // none left
 }
-function isAddOnSoldOut(id) { return SOLD_OUT[stockKey(id) + "_icing"] === true; }
+function isAddOnSoldOut(id) { return SOLD_OUT[stockKey(id) + "_icing"] === true || stockLeft(stockKey(id) + "_icing") === 0; }
 
 async function fetchJson(url) {
   try {
@@ -76,14 +107,19 @@ async function fetchJson(url) {
 }
 
 async function loadStock() {
-  const [stock, limits] = await Promise.all([fetchJson(STOCK_URL), fetchJson(LIMITS_URL)]);
-  if (!stock && !limits) return; // couldn't load either — leave everything as is
+  const [stock, limits, left] = await Promise.all([fetchJson(STOCK_URL), fetchJson(LIMITS_URL), fetchJson(COUNTS_URL)]);
+  if (!stock && !limits && !left) return; // couldn't load any — leave everything as is
 
   if (stock) {
     Object.keys(SOLD_OUT).forEach(k => delete SOLD_OUT[k]);
     Object.entries(stock).forEach(([k, v]) => { SOLD_OUT[k] = v === true; });
   }
-  if (limits) applyLimits(limits);
+  if (left && left.counts) {
+    Object.keys(STOCK_LEFT).forEach(k => delete STOCK_LEFT[k]);
+    Object.entries(left.counts).forEach(([k, v]) => { if (typeof v === "number") STOCK_LEFT[k] = v; });
+  }
+  if (limits) lastLimits = limits;
+  applyLimits(lastLimits);
 
   // Fix up any cart saved from an earlier visit: remove sold-out things and
   // pack sizes that are switched off; bring plain items down to the maximum.
@@ -91,8 +127,13 @@ async function loadStock() {
     const qty = cart[item.id] || 0;
     if (isSoldOut(item.id)) { delete cart[item.id]; delete cartAddons[item.id]; return; }
     if (qty && item.packs && item.packs.indexOf(qty) === -1) { delete cart[item.id]; delete cartAddons[item.id]; return; }
-    if (qty && !item.packs && item.max && qty > item.max) { cart[item.id] = item.max; clampAddOnCount(item.id); }
+    if (qty && !item.packs) {
+      const mx = itemMax(item.id);
+      if (mx <= 0) { delete cart[item.id]; delete cartAddons[item.id]; return; }
+      if (qty > mx) { cart[item.id] = mx; clampAddOnCount(item.id); }
+    }
     if (isAddOnSoldOut(item.id)) { delete cartAddons[item.id]; }
+    else clampAddOnCount(item.id);
   });
   saveCart();
   renderCart();
@@ -251,16 +292,22 @@ function renderItemControls() {
       return;
     }
 
+    const leftNow = stockLeft(stockKey(id));
+    const shared = groupKey(stockKey(id)) !== stockKey(id);
+    const lowHtml = leftNow !== null && leftNow <= 10
+      ? `<p class="pack-hint stock-left">${shared ? `Only ${leftNow} sourdough loaves left (White + Seeded)` : `Only ${leftNow} left`}</p>`
+      : "";
+
     const addOnHtml = (qty > 0 && addOn) ? (isAddOnSoldOut(id) ? addOnSoldOutHtml(addOn) : `
       <select class="pack-select addon-select" data-addon-select="${id}" aria-label="How many with ${addOn.label}?">
-        ${addOnOptionsHtml(addOn, qty, cartAddons[id] || 0)}
+        ${addOnOptionsHtml(addOn, addOnCap(id, qty), cartAddons[id] || 0)}
       </select>`) : "";
 
     if (item && item.packSelect) {
       ctrl.innerHTML = `
         <select class="pack-select" data-pack-select="${id}" aria-label="Choose pack size for ${item.name}">
           ${packOptionsHtml(item, qty)}
-        </select>${addOnHtml}`;
+        </select>${lowHtml}${addOnHtml}`;
       return;
     }
 
@@ -271,7 +318,7 @@ function renderItemControls() {
       : "";
 
     if (qty === 0) {
-      ctrl.innerHTML = `<button type="button" class="btn" data-order-add="${id}">Order this</button>${packHint}`;
+      ctrl.innerHTML = `<button type="button" class="btn" data-order-add="${id}">Order this</button>${packHint}${lowHtml}`;
     } else {
       const atMax = qty >= itemMax(id);
       ctrl.innerHTML = `
@@ -279,7 +326,7 @@ function renderItemControls() {
           <button type="button" class="qty-btn" data-cart-dec="${id}" aria-label="Remove one">−</button>
           <span class="qty-value">${qty}</span>
           <button type="button" class="qty-btn" data-cart-inc="${id}" aria-label="Add one"${atMax ? ' disabled title="Maximum reached"' : ''}>+</button>
-        </div>${packHint}${addOnHtml}`;
+        </div>${packHint}${lowHtml}${addOnHtml}`;
     }
   });
 }
@@ -367,7 +414,12 @@ function itemMax(id) {
     max = packs[packs.length - 1];
   } else {
     const m = MENU_ITEMS.find(x => x.id === id);
-    max = m && m.max ? m.max : Infinity;
+    max = m && m.max != null ? m.max : Infinity;
+    // Shared stock (e.g. both loaves): leave room only for what the other kind hasn't used.
+    const left = stockLeft(stockKey(id));
+    if (left !== null && groupKey(stockKey(id)) !== stockKey(id)) {
+      max = Math.min(max, Math.max(0, left - groupUsedByOthers(id)));
+    }
   }
   return max;
 }
@@ -423,7 +475,7 @@ function setPackQty(id, qty) {
 
 function clampAddOnCount(id) {
   if (!cartAddons[id]) return;
-  const qty = cart[id] || 0;
+  const qty = addOnCap(id, cart[id] || 0);
   if (cartAddons[id] > qty) {
     if (qty === 0) delete cartAddons[id];
     else cartAddons[id] = qty;
@@ -451,7 +503,7 @@ function itemAddOn(id) {
 function setAddOnCount(id, count) {
   if (!itemAddOn(id)) return;
   if (Number(count) > 0 && isAddOnSoldOut(id)) return;
-  const qty = cart[id] || 0;
+  const qty = addOnCap(id, cart[id] || 0);
   const clamped = Math.min(Math.max(Number(count) || 0, 0), qty);
   if (clamped === 0) delete cartAddons[id];
   else cartAddons[id] = clamped;
@@ -529,7 +581,7 @@ function renderCart() {
           <div class="cl-addon-row">
             ${isAddOnSoldOut(l.id) ? addOnSoldOutHtml(addOn) : `
             <select class="pack-select pack-select-sm addon-select" data-addon-select="${l.id}" aria-label="How many with ${addOn.label}?">
-              ${addOnOptionsHtml(addOn, l.qty, cartAddons[l.id] || 0)}
+              ${addOnOptionsHtml(addOn, addOnCap(l.id, l.qty), cartAddons[l.id] || 0)}
             </select>`}
           </div>` : "";
         return `<li>

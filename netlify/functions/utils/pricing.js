@@ -29,17 +29,27 @@ const MENU_ITEMS = [
 /* Order limits (limits.json, edited by Asher at /admin) can only RESTRICT what
    the code allows: switch pack sizes off, or set a per-order maximum (1–20) for
    plain items. Prices never come from limits.json. Missing/invalid values fall
-   back to the defaults above. */
+   back to the defaults above.
+   counts (Airtable "In stock", optional) caps it further: pack sizes bigger
+   than what's left are removed, and a plain item's max becomes what's left
+   (0 = sold out). A missing count means no stock limit. */
+const { groupKey } = require("./airtable");
 const MAX_LIMIT = 20;
-function effectiveItem(item, limits) {
+function effectiveItem(item, limits, counts) {
   limits = limits || {};
+  counts = counts || {};
   const key = item.id.replace(/-/g, "_");
+  const sk = groupKey(key); // shared stock row, e.g. both loaves -> "sourdough"
+  const left = typeof counts[sk] === "number" ? counts[sk] : null;
   const out = Object.assign({}, item);
   if (item.packs) {
-    out.packs = item.packs.filter(function (p) { return limits[key + "_pack_" + p] !== false; });
+    out.packs = item.packs.filter(function (p) {
+      return limits[key + "_pack_" + p] !== false && (left === null || p <= left);
+    });
   } else {
     const m = Number(limits[key + "_max"]);
     if (Number.isInteger(m) && m >= 1) out.max = Math.min(m, MAX_LIMIT);
+    if (left !== null) out.max = Math.min(out.max == null ? left : out.max, left);
   }
   return out;
 }
@@ -58,18 +68,18 @@ function basePriceFor(item, qty) {
  * silently dropped rather than trusted. Add-on counts are clamped to the
  * item's quantity, so a customer can never be charged for more than they ordered.
  */
-function computeOrder(cartQty, cartAddons, limits) {
+function computeOrder(cartQty, cartAddons, limits, counts) {
   cartQty = cartQty || {};
   cartAddons = cartAddons || {};
   const lines = [];
   let total = 0;
 
   MENU_ITEMS.forEach(function (baseItem) {
-    const item = effectiveItem(baseItem, limits);
+    const item = effectiveItem(baseItem, limits, counts);
     const qty = Number(cartQty[item.id] || 0);
     if (!qty || qty <= 0) return;
     if (item.packs && item.packs.indexOf(qty) === -1) return;
-    if (item.max && qty > item.max) return;
+    if (item.max != null && qty > item.max) return;
 
     const addOnCount = item.addOn
       ? Math.min(Math.max(Number(cartAddons[item.id] || 0), 0), qty)

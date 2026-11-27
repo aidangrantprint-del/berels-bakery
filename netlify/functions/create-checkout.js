@@ -5,6 +5,7 @@
  */
 const { computeOrder, MENU_ITEMS } = require("./utils/pricing");
 const { loadSoldOut, loadLimits } = require("./utils/stock");
+const { loadCounts, shortages, groupKey } = require("./utils/airtable");
 
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
@@ -27,9 +28,12 @@ exports.handler = async function (event) {
   }
 
   const siteOrigin = process.env.URL || ("https://" + (event.headers.host || ""));
-  const [stock, limits] = await Promise.all([loadSoldOut(siteOrigin), loadLimits(siteOrigin)]);
+  const [stock, limits, airtable] = await Promise.all([
+    loadSoldOut(siteOrigin), loadLimits(siteOrigin), loadCounts(),
+  ]);
+  const counts = airtable ? airtable.counts : {}; // Airtable "In stock" (fresh)
 
-  const { lines, total } = computeOrder(data.cart, data.addons, limits);
+  const { lines, total } = computeOrder(data.cart, data.addons, limits, counts);
 
   // Anything requested that didn't survive the order limits (a pack size that's
   // been switched off, or more than the current maximum) — refuse with a message
@@ -39,6 +43,16 @@ exports.handler = async function (event) {
     if (!(Number(requested[id]) > 0)) continue;
     if (!lines.some(function (l) { return l.id === id; })) {
       const item = MENU_ITEMS.find(function (m) { return m.id === id; });
+      const itemName = item ? item.name : "item";
+      const left = counts[groupKey(id.replace(/-/g, "_"))];
+      if (typeof left === "number" && Number(requested[id]) > left) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({ error: left <= 0
+            ? "Sorry, the " + itemName + " has just sold out, so it's been taken out of your cart. Please check your order and try again."
+            : "Sorry, we only have " + left + " left of the " + itemName + ", so your cart has been adjusted. Please check your order and try again." }),
+        };
+      }
       return {
         statusCode: 409,
         body: JSON.stringify({ error: "Sorry, the amount of " + (item ? item.name : "an item") + " in your cart isn't available any more, so it's been adjusted. Please check your order and try again." }),
@@ -65,6 +79,19 @@ exports.handler = async function (event) {
         body: JSON.stringify({ error: "Sorry, the cream cheese icing has just sold out, so it's been taken off your scrolls. Please check your order and try again." }),
       };
     }
+  }
+
+  // Not enough left in Airtable (e.g. more iced scrolls than icing left).
+  const short = shortages(lines, counts);
+  if (short.length) {
+    const k = short[0].key;
+    const what = k.endsWith("_icing") ? "cream cheese icing"
+      : k === "sourdough" ? "sourdough loaves (White and Seeded together)"
+      : "of that item";
+    return {
+      statusCode: 409,
+      body: JSON.stringify({ error: "Sorry, we only have " + short[0].left + " " + what + " left, so your cart has been adjusted. Please check your order and try again." }),
+    };
   }
 
   const name = String(data.name || "").trim().slice(0, 200);

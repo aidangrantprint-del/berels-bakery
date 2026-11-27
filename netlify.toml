@@ -27,3 +27,11 @@
   to = "/404"
   status = 404
   force = true
+
+# Weekly stock reset (netlify/functions/reset-stock.js): Airtable "In stock"
+# goes back to "Weekly amount" at 12:00am Monday MELBOURNE time. Cron is UTC
+# and Melbourne is UTC+11 (daylight saving) or UTC+10, so it wakes at both
+# Sunday 13:00 and 14:00 UTC and the function only acts when it's midnight
+# in Melbourne.
+[functions."reset-stock"]
+  schedule = "0 13,14 * * 0"

@@ -14,6 +14,36 @@
  */
 const crypto = require("crypto");
 const { loadSoldOut, soldOutProblems } = require("./utils/stock");
+const airtable = require("./utils/airtable");
+
+/* Subtracts the order from Airtable stock exactly once, even if Stripe sends
+   the event again: the Checkout Session is re-read from Stripe and marked with
+   metadata stock_counted=1 after the subtraction. */
+async function subtractStockOnce(sessionId, items) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  const url = "https://api.stripe.com/v1/checkout/sessions/" + encodeURIComponent(sessionId);
+  try {
+    if (key) {
+      const res = await fetch(url, { headers: { "Authorization": "Bearer " + key } });
+      const fresh = await res.json();
+      if (res.ok && fresh.metadata && fresh.metadata.stock_counted === "1") {
+        return { ok: true, short: [], already: true };
+      }
+    }
+    const result = await airtable.subtractOrder(items);
+    if (key && result.ok) {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + key, "Content-Type": "application/x-www-form-urlencoded" },
+        body: "metadata%5Bstock_counted%5D=1",
+      });
+    }
+    return { ok: result.ok, short: result.shortages };
+  } catch (err) {
+    console.error("Stock update failed:", err);
+    return { ok: false, short: [] };
+  }
+}
 
 // Same Apps Script web app as ORDER_ENDPOINT in js/main.js (keep in sync).
 const ORDER_ENDPOINT = "https://script.google.com/macros/s/AKfycbzo_p_47rVAGjdnOUn2vjfydi2P71WgVQzSpl0TNM_Tc_hqMLBiaeM09_AD-gxTmkdN/exec";
@@ -96,6 +126,19 @@ exports.handler = async function (event) {
   }
   if (itemsUnreadable) {
     warnings.push("Item list couldn't be read — check this payment in Stripe");
+  }
+
+  // Take this order off the Airtable "In stock" counts (once per session).
+  if (airtable.configured() && !itemsUnreadable) {
+    const stockResult = await subtractStockOnce(session.id, items);
+    if (stockResult.short.length) {
+      warnings.push("NOT ENOUGH STOCK when paid: " + stockResult.short.map(function (s) {
+        return s.key + " (ordered " + s.wanted + ", had " + s.left + ")";
+      }).join(", ") + " — refund or contact the customer");
+    }
+    if (!stockResult.ok) {
+      warnings.push("Airtable stock couldn't be updated — please adjust the In stock numbers by hand");
+    }
   }
 
   const total = session.amount_total != null ? session.amount_total / 100 : Number(meta.total || 0);
